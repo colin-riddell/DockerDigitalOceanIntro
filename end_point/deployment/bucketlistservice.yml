@@ -1,0 +1,14 @@
+- hosts: bucketlistbackend
+  tasks:
+    - name: Copy app-services files across
+      synchronize:
+        src: ../services/
+        dest: /home/appuser/services
+        mode: push
+        rsync_opts:
+            - "--exclude=node_modules"
+
+    - name: Bring up the rest of the services
+      command: docker-compose up -d --build
+      args:
+        chdir: /home/appuser/services/

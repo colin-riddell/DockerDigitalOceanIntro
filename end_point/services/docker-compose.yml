@@ -1,0 +1,24 @@
+version: '3.1'
+
+services:
+  bucket_list_service:
+    container_name: 'bucket_list_service'
+    ports:
+      - 3000:3000
+    build: ./bucket_list_service/
+    links:
+       - mongoservice
+    restart: on-failure
+
+  mongoservice:
+    image: mongo:latest
+    container_name: "mongoservice"
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+    volumes:
+     - ./data/db:/data/db
+    ports:
+      - 27017:27017
+    command: mongod --smallfiles
+    restart: on-failure
