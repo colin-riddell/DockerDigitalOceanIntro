@@ -16,7 +16,7 @@ Be able to create and run containers locally and on a DigitalOcean droplet.
 
 ## Setup
 
-### Get a DO account
+### *Optional* Get a DO account
 
 [https://m.do.co/c/e224d565e5ec](https://m.do.co/c/e224d565e5ec) - this link gives 100 USD credit.
 
@@ -108,10 +108,10 @@ Running an express.js application without docker is as how we would run it norma
 
 
 ```bash
-npm run build # in a tab if we have -w on the webpack
+npm start # in the server
 
 mongod # in a separate tab 
-npm start   #in a 3rd tab
+npm run serve   #in the client directory
 
 ```
 
@@ -123,7 +123,7 @@ Docker containers allow us to do this more easily.
 ### With a container
 
 ```
-docker run -it --rm --name bucket_list -v "$PWD":/usr/src/bucket-list -w /usr/src/bucket-list node:8 npm install; npm start
+docker run -it --rm --name auth_app -v "$PWD":/usr/src/auth_app -w /usr/src/auth_app node:8 npm install; npm start
 ```
 
 In another tab we can do `docker ps` (docker list running containers), to see it running.
@@ -131,6 +131,12 @@ In another tab we can do `docker ps` (docker list running containers), to see it
 This will work, but then fail to connect to the MongoDB.
 
 To solve this we could open another tab then do another long run command to find a mongod image, pull that and run it, but we might still have issues with that and typing these huge run commands isn't nice.
+
+**Ideally, we'd have each thing in its own container. The back-end, the front-end and the mongodb**
+
+## Images 
+
+To save us from typing really long commands to use the Docker API, we can use a more script-like code to create containers. To create containers we first need to make a docker **image**
 
 
 ## Images vs Containers
@@ -157,7 +163,7 @@ At the same level as the `package.json` in the bucket list node project:
 #Dockerfile
 FROM node:8
 
-WORKDIR /usr/src/bucket-list/
+WORKDIR /usr/src/auth-app/
 
 COPY . .
 
@@ -178,12 +184,19 @@ CMD [ "npm", "start" ]
 * `EXPOSE 3000` - By default containers have all their I/O including networking shut off from the host and other containers. Our node app will run on 3000, so we open 3000 in order to see it working. 
 * `CMD [ "npm", "start" ]` - This is where we specify the container **entrypoint**. This is what's run when the container starts. Remember if a container's `CMD` is simply `ls` it will just run that command and exit. If it's something like a web server it will run that while the container is running. **As soon as the process started by `CMD` exits, the container also exits.**
 
+### Exclude the `node_modules` from being copied
+Cretate a `dockerignore` file and add - we don't want
+
+```
+node_modules
+```
+
 ### Buidling + Running the Dockerfile
 
 We can build that Dockerfile into an image called `bucket_list` with the command:
 
 ```bash
-docker build . -t bucket_list
+docker build . -t auth-app
 ```
 
 We should be able to see the image listed when we do `docker images`.
@@ -191,18 +204,18 @@ We should be able to see the image listed when we do `docker images`.
 To run the resulting image:
 
 ```bash
-docker run -p3000:3000 bucket_list
+docker run -p3000:3000 auth-app
 ```
 **Why did you need to specify the port?**
 The port setting we specified in the Dockerfile is just the one we want to ensure the image will allow us to expose. We still need to ask the run command to expose it.
 
 [http://localhost:3000/](http://localhost:3000/) should now have the running app. **But we still need a MongoDB database**. We'll look at doing this in the next section...
 
-### Multiple containers
+## Multiple containers
 
 We _could_ create a MongoD Dockerfile and create a container for it like that, but that requires us to run two containers at the same time in different tabs... so let's instead use `docker-compose`.
 
-**docker-compose** allows us to create a scheme in `yaml` to orchistrate multiple containers and be able to turn them all of, or all on at the same time.
+**docker-compose** allows us to create a scheme in `yaml` to orchistrate the running of multiple containers and be able to turn them all of, or all on at the same time. This way, we could "spin up" our mongod, client and server in one command.
 
 **docker-compose** lets us build images and start containers through one nice easy to use command line tool and an easy to understand yaml configuration.
 
@@ -216,11 +229,11 @@ Let's build a docker-compose.
 version: '3.1'
 
 services:
-  bucket_list_service:
-    container_name: 'bucket_list_service'
+  auth_server:
+    container_name: 'auth_server'
     ports:
       - 3000:3000
-    build: ./bucket_list_service/
+    build: ./server/
     links:
        - mongoservice
     restart: on-failure
@@ -244,23 +257,30 @@ services:
 
 File structure changes to support `docker-compose` microservices.
 
-Let's make a new directory called `bucket_list_service`, and move everything into it except `docker-compose.yml`.
+Let's make a new directory called `services`, `client`, `server` and `docker-compose.yml` into it.
 
-Then make a `services` directory and move `bucket_list_service` and `docker-compose.yml` into it.
 
 ```
 .
-├── deployment/
-└── services/
-    ├── bucket_list_service/
-    │   ├── Dockerfile
-    │   ├── client/
-    │   ├── node_modules/
+└── services
+    ├── client
+    │   ├── README.md
+    │   ├── babel.config.js
+    │   ├── node_modules
     │   ├── package-lock.json
     │   ├── package.json
-    │   ├── server/
-    │   └── webpack.config.js
-    └── docker-compose.yml
+    │   ├── postcss.config.js
+    │   ├── public
+    │   └── src
+    ├── docker-compose.yml
+    └── server
+        ├── Dockerfile
+        ├── models
+        ├── node_modules
+        ├── package-lock.json
+        ├── package.json
+        └── server.js
+
 ```
 
 Keeping the `docker-compose` at a level higher than the services that it uses means it's easier to add more services later on, and have docker-compose orchestrate them all.
@@ -298,11 +318,11 @@ When we have multiple containers Docker creates a virual network for them all to
 
 Very useful that we don't need to know the ip of a container, instead Docker gives it a domain name available within it's own virtual network. The name is based on the provided `container_name`. In our case `bucket_list_service`.
 
-If we look into `server.js`, the express app is still trying to connect to mongodb locally ( on `localhost`).
+If we look into `server.js`, the express app is still trying to connect to mongodb locally ( on `localhost`). **localhost** now means that individual container... but our mongod runs in a separate container.
 
 ```javascript
 // server.js
-MongoClient.connect('mongodb://localhost:27017')
+mongoose.connect('mongodb://localhost:27017/signups')
 ```
 There is no MongoDB server running on localhost within that container, so we need to ask it to connect to the `mongoservice` container instead.
 
@@ -310,8 +330,10 @@ Change this to:
 
 ```javascript
 // server.js
-MongoClient.connect('mongodb://mongoservice:27017')
+mongoose.connect('mongodb://mongoservice:27017/signups')
+
 ```
+
 
 
 Build:
@@ -376,6 +398,66 @@ So far we've managed to:
 * **Create a  docker image for our bucket-list express app.**
 * **Create a docker-compose that allows building and running of the bucket-list image along with a pre-built mongod image.**
 
+
+## Run the front-end server in a container
+
+We need somewhere to serve the front-end from. For this we have a couple of options:
+
+* use express static serve to serve it from where the back-end runs. This is a nice solution, as it doesn't cause any CORS issues, but not increddibly robust.
+* Serve it on a totally different server on a different domain. This is common practice these days but will lead to CORS issues that we'll need to configure around in the server.
+* Host it in another container on our machine using NGINX
+
+## NGINX
+
+**Nginx** is a hiligly configurable web-server. It's a very robust server for use in production environments for many different things. We will run a Docker container with NGINX running in it. We'll give it the static files from our front-end to serve up from there.
+
+```
+#docker-compose.yml
+nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    volumes:
+      - ./client/dist/:/usr/share/nginx/html
+    ports:
+      - 8080:80
+
+```
+
+The location `/usr/share/nginx/html` is where the nginx container will serve its static web content from.
+
+We therefore need to put our built Vue app into `./client/dist` so that it can be served into that container under `/usr/share/nginx/html` - which will be picked up by nginx and hosted from there under port `80`.
+
+**Now** brining the services down, re-building, and **updating** them will launch the nginx container, too.
+
+```
+docker-compose down
+docker-compose build
+docker-compose up -d
+```
+
+We should be able to go to `localhost:8081` - but this won't show anything as it's not got anything populated in the host folder.
+
+```
+cd client
+npm run build
+```
+
+This will put the built client code into `dist`. From here it will be picked up by the nginx container so it can get hosted.
+
+**Update the running container** We need to restart **nginx** for this to work.. so now do
+
+``` 
+docker-compose down
+docker-compose build
+docker-compose up -d
+```
+
+Refresh `http://localhost:8081`.
+
+
+
+## Update the front-end to point to the containers rather than localhost
 
 -----------
 

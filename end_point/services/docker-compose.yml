@@ -1,11 +1,11 @@
 version: '3.1'
 
 services:
-  bucket_list_service:
-    container_name: 'bucket_list_service'
+  auth_server:
+    container_name: 'auth_server'
     ports:
       - 3000:3000
-    build: ./bucket_list_service/
+    build: ./server/
     links:
        - mongoservice
     restart: on-failure
@@ -22,3 +22,12 @@ services:
       - 27017:27017
     command: mongod --smallfiles
     restart: on-failure
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    volumes:
+      - ./client/dist/:/usr/share/nginx/html
+    ports:
+      - 8081:80
