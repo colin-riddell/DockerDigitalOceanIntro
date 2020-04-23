@@ -154,9 +154,13 @@ thus
 
 The **Dockerfile** gives us a way to script the creation of an **image**.
 
-Let's create our first Dockerfile to run the bucket list app.
+Let's create our first Dockerfile to run the bucket list app. Before doing that, we might want to install the `language-docker` package for atom.
 
+```bash
+apm install language-docker
+```
 
+Now we can create the Dockerfile
 At the same level as the `package.json` in the bucket list node project:
 
 ```Dockerfile
